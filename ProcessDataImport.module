@@ -1,0 +1,249 @@
+<?php
+
+class ProcessDataImport extends Process {
+
+	public static function getModuleInfo() {
+		return array(
+			'title' => 'Data import',
+			'summary' => 'Import data from any feed (xml, json, csv supported) and save it as native pw-pages.',
+			'href' => 'http://processwire.com/talk/',
+			'version' => 001,
+			'permanent' => false,
+			'autoload' => false,
+			'singular' => true,
+		);
+	}
+
+	public function init() {
+		parent::init();
+	}
+
+	public function ___execute() {
+		$this->setFuel('processHeadline', 'Data imports');
+		
+		$table = $this->modules->get("MarkupAdminDataTable");
+		$table->setEncodeEntities(false);
+		$table->headerRow(array('Source url', 'Cron interval', 'Unique fields', 'Delete'));
+
+		$result = $this->db->query("SELECT * FROM {$this->className} ORDER BY source_url");
+
+		while($row = $result->fetch_assoc()) {
+
+			 // output in table rows with edit link and delete checkbox?
+			 $table->row(array(
+				 $row['source_url'] => "edit/?id=$row[id]",
+				 $row['cron_interval'] => "edit/?id=$row[id]",
+				 $row['unique_fields'],
+				 "<input type='checkbox' name='delete[]' value='$row[id]' />"
+				 ));
+		}
+
+		$button = $this->modules->get("InputfieldButton");
+		$button->type = 'submit';
+		$button->id = 'submit_delete';
+		$button->value = 'Remove selected sources';
+
+		$table->action(array('Add source' => 'add/'));
+
+		// Is there clean way to add button to right side?
+		return "<form action='./delete/' method='post'>" .$table->render() . $button->render() . "</form>";
+	}
+
+	/**
+	 * Edit/Add Redirect - Called when the URL is: ./edit/
+	 *
+	 */
+	public function ___executeAdd() {
+		$this->fuel->breadcrumbs->add(new Breadcrumb('../', 'Data imports'));
+		$this->setFuel('processHeadline', "Add import source");
+		
+		$form = $this->modules->get("InputfieldForm");
+		$form->method = 'post';
+		$form->action = '../load/';
+
+		$field = $this->modules->get("InputfieldURL");
+		$field->label = 'Source url';
+		$field->description = 'Enter full url to the data source you want to import. Ie. http://www.nytimes.com/services/xml/rss/nyt/HomePage.xml';
+		$field->name = 'source_url';
+		$form->add($field);
+		
+		$field = $this->modules->get("InputfieldSelect");
+		$field->label = 'Source data format';
+		$field->addOption('unknown', "I don't know");
+		$field->addOption('JSON');
+		$field->addOption('XML');
+		$field->name = 'data_format';
+		$form->add($field);
+		
+		$field = $this->modules->get("InputfieldPageListSelect");
+		$field->label = 'Parent page';
+		$field->attr('id+name', 'parent_page');
+		$field->startLabel = "Select Page";
+		$field->parent_id = 0; // tell it to start from homepage
+		$form->add($field);
+		
+		$field = $this->modules->get("InputfieldSelect");
+		$field->label = 'Template for new pages';
+		$field->name = 'template';
+		foreach ($this->templates as $template) {
+			$field->addOption("$template");
+		}
+		$form->add($field);
+		
+		$field = $this->modules->get("InputfieldButton");
+		$field->type = 'submit';
+		$field->value = 'Continue';
+
+		$form->add($field);
+
+		return $form->render();
+	}
+	
+	public function ___executeLoad() {
+		$source_url = $this->input->post->source_url;
+		$parent_id = $this->input->post->parent_page;
+		$template = $this->templates->get($this->input->post->template);
+		$data_format = $this->input->post->data_format;
+		
+		$out = "<p class='description'>Click on the array which has items that you want to save. After that you can map those values to your template fields.</p>";
+		$out .= '<form method="post" action="../save"><ul class="di"><li><div>ROOT</div>';
+		
+		if (strlen($source_url) > 8) {
+			$data = file_get_contents($source_url);
+		}
+		
+		if ($json_data = json_decode($data)) {
+			$data_format = 'json';
+			$data = new iterateObject($json_data);
+			$out .= $data->iterate();
+		} elseif ($xml_data = new SimpleXMLElement($data)) {
+			$data_format = 'xml';
+			$data = new iterateObject($xml_data);
+			$out .= $data->iterate();
+		}
+		$out .= '</li></ul>';
+		
+		$out .= '<select id="fields">';
+		$out .= '<option></option>';
+		foreach ($template->fields as $field) {
+			$out .= "<option value='$field'>$field</option>";
+		}
+		$out .= '</select><input type="submit" value="Continue"></input></form>';
+		
+		return $out;
+		
+	}
+	
+	/**
+	 * Save Redirect - Called when the URL is ./save/
+	 *
+	 */
+	public function ___executeSave() {
+		print_r($this->input->post);
+
+	}
+
+	public function ___executeSavearray() {
+
+	}
+
+	public function ___executeDelete() {
+
+	}
+
+	public function ___install() {
+		parent::___install();
+
+		$p = new Page();
+		$p->template = $this->templates->get("admin");
+		$p->parent = $this->pages->get("template=admin, name=setup");
+		$p->title = 'Data imports';
+		$p->name = 'data-imports';
+		$p->process = $this;
+		$p->save();
+
+		$sql = <<< _END
+
+		CREATE TABLE {$this->className} (
+			id int unsigned NOT NULL auto_increment,
+			source_url varchar(255) NOT NULL DEFAULT '',
+			cron_interval varchar(255) NOT NULL DEFAULT '',
+			data_root varchar(255) NOT NULL DEFAULT '',
+			data_format varchar(255) NOT NULL DEFAULT '',
+			template varchar(255) NOT NULL DEFAULT '',
+			unique_fields text,
+			parent_page int unsigned,
+			PRIMARY KEY(id),
+			UNIQUE KEY(source_url)
+		) ENGINE = MYISAM;
+
+_END;
+
+		$this->db->query($sql);
+		
+		$sql2 = <<< _END
+
+		CREATE TABLE {$this->className}mappings (
+			id int unsigned NOT NULL auto_increment,
+			source_id int unsigned NOT NULL,
+			from_field varchar(255) NOT NULL DEFAULT '',
+			to_field varchar(255) NOT NULL DEFAULT '',
+			PRIMARY KEY(id)
+		) ENGINE = MYISAM;
+
+_END;
+
+		$this->db->query($sql2);
+
+	}
+
+	public function ___uninstall() {
+		$p = $this->pages->get('template=admin, name=data-imports');
+		$p->delete();
+		$this->db->query("DROP TABLE {$this->className}");
+	}
+}
+
+class iterateObject {
+	
+	public $data = '';
+	
+	function __construct($data) {
+		$this->data = $data;
+	}
+	
+	function iterate($depth = 1) {
+		$out = '<ul class="di">';
+		$lastKey = '';
+		foreach ($this->data as $key => $value) {
+			
+			if ($key === 1 || $lastKey === $key) {
+				$out .= ' <span class="more">--- there are more items in this array ---</span>';
+				break;
+			}
+			
+			if (is_array($value)) {
+				$type = 'array';
+				$out .= '<li data-path="|'. $key .'"><div>' . $key . ' <span class="type">'.$type.'</span></div>';
+			} elseif (is_object($value)) {
+				$type = 'object';
+				$out .= '<li data-path="|'. $key .'">' . $key . ' <span class="type">'.$type.'</span>';
+			} else {
+				$type = 'value';
+				$out .= '<li><a title="'.$value.'">' . $key . '</a>';
+			}
+			
+			$lastKey = $key;
+			
+			if ($type == 'array' || $type == 'object') {
+				$data = new iterateObject($value);
+				$out .= $data->iterate();
+			}
+			
+			$out .= '</li>';
+				
+		}
+		$out .= '</ul>';
+		return $out;
+	}
+}

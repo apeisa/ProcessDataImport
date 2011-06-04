@@ -1,0 +1,44 @@
+ul.di {
+	margin-left: 2em !important;
+}
+
+ul.di li {
+	font-weight: bold;
+	margin: 0.5em 0;
+}
+
+ul.di li div {
+	border-left: 3px solid green;
+	padding-left: 3px;
+}
+
+ul.di li div:hover {
+	cursor: pointer;
+	text-decoration: underline;
+}
+
+ul.di li span.type {
+	font-weight: normal;
+	font-size: 10px;
+	text-transform: uppercase;
+	color: #bbb;
+}
+
+ul.di li span.value {
+	font-weight: normal;
+	color: #888;
+}
+
+ul.di li span.more {
+	color: #ccc;
+	font-weight: normal;
+}
+
+ul.di li.active {
+	background: #eee;
+	border: 1px solid #bbb;
+}
+
+#fields {
+	display: none;
+}
