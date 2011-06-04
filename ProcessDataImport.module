@@ -201,6 +201,7 @@ _END;
 		$p = $this->pages->get('template=admin, name=data-imports');
 		$p->delete();
 		$this->db->query("DROP TABLE {$this->className}");
+		$this->db->query("DROP TABLE {$this->className}mappings");
 	}
 }
 
