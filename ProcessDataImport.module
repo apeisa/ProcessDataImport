@@ -106,7 +106,7 @@ class ProcessDataImport extends Process {
 		$data_format = $this->input->post->data_format;
 		
 		$out = "<p class='description'>Click on the array which has items that you want to save. After that you can map those values to your template fields.</p>";
-		$out .= '<form method="post" action="../save"><ul class="di"><li><div>ROOT</div>';
+		$out .= '<form id="map" method="post" action="../save"><ul class="di"><li><div>ROOT</div>';
 		
 		if (strlen($source_url) > 8) {
 			$data = file_get_contents($source_url);
@@ -124,11 +124,11 @@ class ProcessDataImport extends Process {
 		$out .= '</li></ul>';
 		
 		$out .= '<select id="fields">';
-		$out .= '<option></option>';
+		$out .= '<option selected="selected"></option>';
 		foreach ($template->fields as $field) {
 			$out .= "<option value='$field'>$field</option>";
 		}
-		$out .= '</select><input type="submit" value="Continue"></input></form>';
+		$out .= '</select><button type="submit" name="submit" value="Continue"></button></form>';
 		
 		return $out;
 		
@@ -139,7 +139,14 @@ class ProcessDataImport extends Process {
 	 *
 	 */
 	public function ___executeSave() {
-		print_r($this->input->post);
+		$fields = $this->input->post;
+		unset($fields['submit']);
+		$out = '';
+		foreach($fields as $key => $value) {
+			$out .= '<br>' . $key . "=> " . $value;
+		}
+		
+		return $out;
 
 	}
 
@@ -225,13 +232,13 @@ class iterateObject {
 			
 			if (is_array($value)) {
 				$type = 'array';
-				$out .= '<li data-path="|'. $key .'"><div>' . $key . ' <span class="type">'.$type.'</span></div>';
+				$out .= '<li data-path="+'. $key .'"><div>' . $key . ' <span class="type">'.$type.'</span></div>';
 			} elseif (is_object($value)) {
 				$type = 'object';
-				$out .= '<li data-path="|'. $key .'">' . $key . ' <span class="type">'.$type.'</span>';
+				$out .= '<li data-path="+'. $key .'">' . $key . ' <span class="type">'.$type.'</span>';
 			} else {
 				$type = 'value';
-				$out .= '<li><a title="'.$value.'">' . $key . '</a>';
+				$out .= '<li data-path="+'. $key .'"><a title="'.$value.'">' . $key . '</a>';
 			}
 			
 			$lastKey = $key;

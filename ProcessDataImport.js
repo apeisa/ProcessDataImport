@@ -19,14 +19,25 @@ $(document).ready(function() {
 					
 					// And finally we save the data-path so that we know how to find this value
 					if($(this).data('path')) {
-						path = path + $(this).data('path');
+						path = $(this).data('path') + path;
 					}
 				}
 			});
 			$(this).append($("#fields").clone().removeAttr("id").attr('name', path));
 			console.log(path);
 		});
+		
+		
 		//$(this).parent().find('a').;
 		
 	});
+	
+	$('#map').submit(function(){
+		$(this).find('select option:selected').each(function(){
+			//alert($(this).value);
+			if ($(this).text() == '') {
+				$(this).parent().remove();
+			}
+		});
+	})	
 });
