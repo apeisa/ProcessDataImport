@@ -28,6 +28,10 @@ $(document).ready(function() {
 		});
 		
 		
+		
+		
+		
+		
 		//$(this).parent().find('a').;
 		
 	});
@@ -39,5 +43,16 @@ $(document).ready(function() {
 				$(this).parent().remove();
 			}
 		});
-	})	
+		var data_root = $("ul.di li.active").data('path');
+		
+		$("ul.di li.active").parents().each(function(){
+			if ($(this).data('path') == undefined) {
+				// only items with data-path attr
+			} else {
+				data_root = data_root + $(this).data('path');
+			}
+		});
+		
+		$('<input type="hidden" name="data_root" value="'+data_root+'"></input>').appendTo('#map');
+	});	
 });

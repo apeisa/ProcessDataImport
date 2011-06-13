@@ -8,7 +8,7 @@ ul.di li {
 }
 
 ul.di li div {
-	border-left: 3px solid green;
+	border-left: 10px solid green;
 	padding-left: 3px;
 }
 
@@ -37,6 +37,10 @@ ul.di li span.more {
 ul.di li.active {
 	background: #eee;
 	border: 1px solid #bbb;
+}
+
+ul.di li a {
+	cursor: help;
 }
 
 #fields {
