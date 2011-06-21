@@ -23,7 +23,7 @@ $(document).ready(function() {
 					}
 				}
 			});
-			$(this).append($("#fields").clone().removeAttr("id").attr('name', path));
+			$(this).append($("#fields").clone().removeAttr("id").attr('name', 'fields['+path+']'));
 			console.log(path);
 		});
 		

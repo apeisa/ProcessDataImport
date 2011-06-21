@@ -106,7 +106,7 @@ class ProcessDataImport extends Process {
 		$data_format = $this->input->post->data_format;
 		
 		$out = "<p class='description'>Click on the array which has items that you want to save. After that you can map those values to your template fields.</p>";
-		$out .= '<form id="map" method="post" action="../save"><ul class="di"><li><div>ROOT</div>';
+		$out .= '<form id="map" method="post" action="../save"><ul class="di"><li data-path="|+|ROOT"><div>ROOT</div>';
 		
 		if (strlen($source_url) > 8) {
 			$data = file_get_contents($source_url);
@@ -127,7 +127,7 @@ class ProcessDataImport extends Process {
 		$out .= '<select id="fields">';
 		$out .= '<option selected="selected"></option>';
 		foreach ($template->fields as $field) {
-			$out .= "<option value='$field'>$field</option>";
+			$out .= "<option value='$field->id'>$field</option>";
 		}
 		$out .= '</select><button type="submit" name="submit">Continue</button>';
 		
@@ -150,21 +150,132 @@ class ProcessDataImport extends Process {
 		$source_url = $this->input->post->source_url;
 		$data_format = $this->input->post->data_format;
 		$data_root = $this->input->post->data_root;
+		$parent_id = $this->input->post->parent_id;
+		
+		if (!$parent_id) {
+			return "Parent id missing, remember to choose parent page.";
+		}
+		
+		// I use |+| string as delimeter (probably not the best one here, but hopely something that no one is using in their keys..)
 		$data_root = preg_split('/\|\+\|/', $data_root, NULL, PREG_SPLIT_NO_EMPTY);
+		$data_root = serialize($data_root);
+		
 		$template_id = $this->input->post->template_id;
 		$parent_id = $this->input->post->parent_id;
-		print $sql = "INSERT INTO {$this->className} SET source_url = '$source_url', data_format = '$data_format', data_root = '$data_root', parent_id = '$parent_id', template_id = '$template_id' ON DUPLICATE KEY UPDATE id = id;";
-		//$this->db->query($sql);
+		$sql = "INSERT INTO {$this->className} SET source_url = '$source_url', data_format = '$data_format', data_root = '$data_root', parent_id = '$parent_id', template_id = '$template_id' ON DUPLICATE KEY UPDATE id = id;";
+		$this->db->query($sql);
+		$source_id = $this->db->insert_id;
 		$fields = $this->input->post;
 		unset($fields['submit']);
+		
 		$out = '';
-		foreach($fields as $key => $value) {
-			$out .= '<br>' . $key . "=> " . $value;
+		foreach($fields['fields'] as $key => $value) {
+			$key = preg_split('/\|\+\|/', $key, NULL, PREG_SPLIT_NO_EMPTY);
+			$key_s = serialize($key);
+			$sql = "INSERT INTO {$this->className}mappings SET source_id = '$source_id', from_field = '$key_s', to_field = '$value' ON DUPLICATE KEY UPDATE id = id;";
+			$this->db->query($sql);
+			$out .= '<br>' . var_dump($key) . "=> " . $value;
 		}
-		print var_dump($data_root);
+		
 		
 		return $out;
-
+	}
+	
+	public function ___executeUpdate() {
+		$id = $this->input->post->id;
+		$source_url = $this->input->post->source_url;
+		$data_format = $this->input->post->data_format;
+		$parent_id = $this->input->post->parent_page;
+		$cron_interval = $this->input->post->cron_interval;
+		
+		$this->db->query("UPDATE {$this->className} SET source_url = '$source_url', cron_interval = '$cron_interval', data_format = '$data_format', parent_id = '$parent_id' WHERE id=$id");
+		
+		$this->message("Data import updated");
+		$this->session->redirect("../"); // back to list
+	}
+	
+	public function ___executeEdit() {
+		$id = (int) $this->input->get->id;
+		$this->setFuel('processHeadline', "Edit data source");
+		
+		if($id > 0) {
+			$result = $this->db->query("SELECT id, source_url, cron_interval, data_root, data_format, parent_id, template_id, unique_fields FROM {$this->className} WHERE id=$id");
+			list($id, $source_url, $cron_interval, $data_root, $data_format, $parent_id, $template_id, $unique_fields) = $result->fetch_array();
+		}
+		
+		$form = $this->modules->get("InputfieldForm");
+		$form->method = 'post';
+		$form->action = '../update/';
+		
+		$field = $this->modules->get("InputfieldHidden");
+		$field->name = 'id';
+		$field->value = $id;
+		$form->add($field);
+		
+		$field = $this->modules->get("InputfieldURL");
+		$field->label = 'Source url';
+		$field->description = 'Enter full url to the data source you want to import. Ie. http://www.nytimes.com/services/xml/rss/nyt/HomePage.xml';
+		$field->attr('id+name', 'source_url');
+		$field->value = $source_url;
+		$form->add($field);
+		
+		$field = $this->modules->get("InputfieldSelect");
+		$field->label = 'CRON interval';
+		$field->attr('id+name', 'cron_interval');
+		$field->description = 'Interval how often we fetch new data from source';
+		$field->addOption($cron_interval, $cron_interval, array('selected' => 'selected'));
+		$field->addOption('manual', 'Manual only');
+		$field->addOption('5Minutes', '5 Minutes');
+		$field->addOption('15Minutes', '15 Minutes');
+		$field->addOption('30Minutes', '30 Minutes');
+		$field->addOption('Hour', '1 Hour');
+		$field->addOption('6Hours', '6 Hours');
+		$field->addOption('12Hours', '12 Hours');
+		$field->addOption('Day', 'Day');
+		$field->addOption('2Days', '2 Days');
+		$field->addOption('Week', 'Week');
+		$field->addOption('2Weeks', '2 Weeks');
+		$field->addOption('4Weeks', 'Month');
+		$form->add($field);
+		
+		$field = $this->modules->get("InputfieldText");
+		$field->setAttribute('disabled', 'disabled');
+		$data_root = unserialize($data_root);
+		$path = '';
+		foreach($data_root as $data_path) {
+			$path .= '=> ' . $data_path .' ';
+		}
+		$field->value = $path;
+		$field->name = 'data_root';
+		$form->add($field);
+		
+		$field = $this->modules->get("InputfieldSelect");
+		$field->label = 'Data format';
+		$field->attr('id+name', 'data_format');
+		$field->addOption($data_format);
+		$field->addOption('json');
+		$field->addOption('xml');
+		$field->addOption('csv');
+		$form->add($field);
+		
+		$field = $this->modules->get("InputfieldPageListSelect");
+		$field->label = 'Parent page';
+		$field->attr('id+name', 'parent_page');
+		$field->startLabel = "Select Page";
+		$field->parent_id = 0; // tell it to start from homepage
+		$field->value = $parent_id;
+		$form->add($field);
+		
+		$field = $this->modules->get("InputfieldButton");
+		$field->type = 'submit';
+		$field->value = 'Save';
+		$form->add($field);
+		
+		$out = $form->render();
+		
+		
+		
+		return $out;
 	}
 
 	public function ___executeDelete() {
@@ -193,7 +304,6 @@ class ProcessDataImport extends Process {
 			parent_id int unsigned NOT NULL,
 			template_id int unsigned NOT NULL,
 			unique_fields text,
-			parent_page int unsigned,
 			PRIMARY KEY(id),
 			UNIQUE KEY(source_url)
 		) ENGINE = MYISAM;
