@@ -126,8 +126,10 @@ class ProcessDataImport extends Process {
 		}
 		$out .= '</li></ul>';
 		
+		// This keeps all the fields that this template has (js file copies this after every variable)
 		$out .= '<select id="fields">';
 		$out .= '<option selected="selected"></option>';
+
 		foreach ($template->fields as $field) {
 			$out .= "<option value='$field->id'>$field</option>";
 		}
@@ -309,6 +311,9 @@ class ProcessDataImport extends Process {
 		
 		if ($data_format == "json") {
 			$data = json_decode($data);
+		} elseif ($data_format == "xml") {
+			$data = new SimpleXMLElement($data);
+			$data = simplexml2array($data);
 		}
 		
 		$out = '';
@@ -321,7 +326,19 @@ class ProcessDataImport extends Process {
 			if($key = array_search('ROOT', $data_root)) {
 				unset($data_root[$key]);
 			}
-			$loopdata = map_property($data, $data_root);
+			
+			$data_root = array_reverse($data_root);
+			
+			echo "<pre>";
+			print_r($data_root);
+			echo "</pre>";
+			
+			if ($data_format == 'xml') {
+				$loopdata = map_array($data, $data_root);
+			} elseif ($data_format == 'json') {
+				$loopdata = map_property($data, $data_root);
+			}
+			
 		}
 		// We are in the root, so just fetch from it
 		else {
@@ -337,8 +354,12 @@ class ProcessDataImport extends Process {
 				array_shift($fieldMap['from_field']);
 				$field_root = $fieldMap['from_field'];
 				
+				if ($data_format == 'xml') {
+					$a = map_array($item,$field_root);
+				} elseif ($data_format == 'json') {
+					$a = map_property($item,$field_root);
+				}
 				
-				$a = map_property($item,$field_root);
 				
 				$to_field = $fieldMap["to_field"];
 				
@@ -348,16 +369,17 @@ class ProcessDataImport extends Process {
 			}
 		}
 		
+		// Here we create the pages
 		foreach($values as $item) {
 			$p = new Page();
 			$p->template = $this->templates->get($template_id); 
 			$p->parent = $this->pages->get($parent_id);
-			$p->name = rand(1,500);
 			foreach($item as $key => $value) {
 				$field = $this->fields->get($key);
 				$fName = $field->name;
 				$p->$fName = $value;
 			}
+			$p->name = $p->title; // TODO: If there is already page with that name, either skip, update or duplicate (should be feed setting)
 			$p->save();
 		}
 		
@@ -375,6 +397,22 @@ class ProcessDataImport extends Process {
 
 	public function ___executeDelete() {
 
+		$count = 0;
+
+		if(!is_array($this->input->post->delete) || empty($this->input->post->delete)) {
+			$this->message("Nothing to delete");
+			$this->session->redirect("../"); // back to list
+		}
+
+		foreach($this->input->post->delete as $id) {
+			$id = (int) $id;
+			$this->db->query("DELETE FROM {$this->className} WHERE id=$id");
+			$this->db->query("DELETE FROM {$this->className}mappings WHERE source_id=$id");
+			$count++;
+		}
+
+		$this->message("Deleted " . $count . " data sources");
+		$this->session->redirect("../"); // back to list
 	}
 
 	public function ___install() {
