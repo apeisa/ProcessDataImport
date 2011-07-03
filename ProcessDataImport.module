@@ -23,7 +23,7 @@ class ProcessDataImport extends Process {
 		
 		$table = $this->modules->get("MarkupAdminDataTable");
 		$table->setEncodeEntities(false);
-		$table->headerRow(array('Source url', 'Cron interval', 'Unique fields', 'Delete'));
+		$table->headerRow(array('Source url', 'Cron interval', 'Fetch', 'Unique fields', 'Delete'));
 
 		$result = $this->db->query("SELECT * FROM {$this->className} ORDER BY source_url");
 
@@ -33,6 +33,7 @@ class ProcessDataImport extends Process {
 			 $table->row(array(
 				 $row['source_url'] => "edit/?id=$row[id]",
 				 $row['cron_interval'] => "edit/?id=$row[id]",
+				 'fetch' => "fetch/?id=$row[id]",
 				 $row['unique_fields'],
 				 "<input type='checkbox' name='delete[]' value='$row[id]' />"
 				 ));
@@ -100,6 +101,7 @@ class ProcessDataImport extends Process {
 	}
 	
 	public function ___executeLoad() {
+		$this->fuel->breadcrumbs->add(new Breadcrumb('../', 'Data imports'));
 		$source_url = $this->input->post->source_url;
 		$parent_id = $this->input->post->parent_page;
 		$template = $this->templates->get($this->input->post->template);
@@ -182,6 +184,7 @@ class ProcessDataImport extends Process {
 	}
 	
 	public function ___executeUpdate() {
+		$this->fuel->breadcrumbs->add(new Breadcrumb('../', 'Data imports'));
 		$id = $this->input->post->id;
 		$source_url = $this->input->post->source_url;
 		$data_format = $this->input->post->data_format;
@@ -195,6 +198,7 @@ class ProcessDataImport extends Process {
 	}
 	
 	public function ___executeEdit() {
+		$this->fuel->breadcrumbs->add(new Breadcrumb('../', 'Data imports'));
 		$id = (int) $this->input->get->id;
 		$this->setFuel('processHeadline', "Edit data source");
 		
@@ -276,6 +280,97 @@ class ProcessDataImport extends Process {
 		
 		
 		return $out;
+	}
+	
+	public function ___executeFetch() {
+		$id = (int) $this->input->get->id;
+		if (is_null($id)) $this->session->redirect("../"); // back to list
+		$this->fuel->breadcrumbs->add(new Breadcrumb('../', 'Data imports'));
+		$this->setFuel('processHeadline', "Fetching data from source");
+		
+		$result = $this->db->query("SELECT id, source_url, cron_interval, data_root, data_format, parent_id, template_id, unique_fields FROM {$this->className} WHERE id=$id");
+		list($id, $source_url, $cron_interval, $data_root, $data_format, $parent_id, $template_id, $unique_fields) = $result->fetch_array();
+		
+		
+		$fieldMappings = Array();
+		$i = 0;
+		$result = $this->db->query("SELECT id, source_id, from_field, to_field FROM {$this->className}mappings WHERE source_id = $id");
+		while($row = $result->fetch_array()) {
+			$fieldMappings[$i]['id'] =  $row['id'];
+			$fieldMappings[$i]['source_id'] =  $row['source_id'];
+			$fieldMappings[$i]['from_field'] =  unserialize($row['from_field']);
+			$fieldMappings[$i]['to_field'] =  $row['to_field'];
+			$i++;
+		}
+		
+		if (strlen($source_url) > 8) {
+			$data = file_get_contents($source_url);
+		}
+		
+		if ($data_format == "json") {
+			$data = json_decode($data);
+		}
+		
+		$out = '';
+		
+		$data_root = unserialize($data_root);
+		
+		
+		// If there is more than one item, then we are deeper than root
+		if (count($data_root) > 1) {
+			if($key = array_search('ROOT', $data_root)) {
+				unset($data_root[$key]);
+			}
+			$loopdata = map_property($data, $data_root);
+		}
+		// We are in the root, so just fetch from it
+		else {
+			$loopdata = $data;
+		}
+		
+		$values = array();
+		foreach($loopdata as $key => $item) {
+			
+			foreach($fieldMappings as $fieldMap) {
+				
+				// There is one unnecessary item in the beginning, we remove that
+				array_shift($fieldMap['from_field']);
+				$field_root = $fieldMap['from_field'];
+				
+				
+				$a = map_property($item,$field_root);
+				
+				$to_field = $fieldMap["to_field"];
+				
+				// Values will hold $to_field as key
+				$values[$key][$to_field] = $a;
+				
+			}
+		}
+		
+		foreach($values as $item) {
+			$p = new Page();
+			$p->template = $this->templates->get($template_id); 
+			$p->parent = $this->pages->get($parent_id);
+			$p->name = rand(1,500);
+			foreach($item as $key => $value) {
+				$field = $this->fields->get($key);
+				$fName = $field->name;
+				$p->$fName = $value;
+			}
+			$p->save();
+		}
+		
+		echo "<pre>";
+		print_r($values);
+		echo "</pre>";
+		
+		
+		
+		return $out;
+		
+		
+		
 	}
 
 	public function ___executeDelete() {
@@ -402,4 +497,20 @@ function simplexml2array($xml) {
        return $r;
    }
    return (string) $xml;
+}
+
+function map_property($obj, $array) {
+  $ret = $obj;
+  foreach($array as $prop) {
+    $ret = $ret->$prop;
+  }
+  return $ret;
+}
+
+function map_array($a, $array) {
+  $ret = $a;
+  foreach($array as $prop) {
+    $ret = $ret[$prop];
+  }
+  return $ret;
 }
