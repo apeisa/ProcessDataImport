@@ -16,6 +16,14 @@ class ProcessDataImport extends Process {
 
 	public function init() {
 		parent::init();
+		$this->addHook('LazyCron::every10Minutes', $this, 'cron10Minutes');
+		$this->addHook('LazyCron::every30Minutes', $this, 'cron30Minutes');
+		$this->addHook('LazyCron::everyHour', $this, 'cronHour');
+		$this->addHook('LazyCron::every6Hours', $this, 'cron6Hours');
+		$this->addHook('LazyCron::every12Hours', $this, 'cron12Hours');
+		$this->addHook('LazyCron::everyDay', $this, 'cronDay');
+		$this->addHook('LazyCron::everyWeek', $this, 'cronWeek');
+		$this->addHook('LazyCron::every4Weeks', $this, 'cron4Weeks');
 	}
 
 	public function ___execute() {
@@ -231,16 +239,13 @@ class ProcessDataImport extends Process {
 		$field->description = 'Interval how often we fetch new data from source';
 		$field->addOption($cron_interval, $cron_interval, array('selected' => 'selected'));
 		$field->addOption('manual', 'Manual only');
-		$field->addOption('5Minutes', '5 Minutes');
-		$field->addOption('15Minutes', '15 Minutes');
+		$field->addOption('10Minutes', '10 Minutes');
 		$field->addOption('30Minutes', '30 Minutes');
 		$field->addOption('Hour', '1 Hour');
 		$field->addOption('6Hours', '6 Hours');
 		$field->addOption('12Hours', '12 Hours');
 		$field->addOption('Day', 'Day');
-		$field->addOption('2Days', '2 Days');
 		$field->addOption('Week', 'Week');
-		$field->addOption('2Weeks', '2 Weeks');
 		$field->addOption('4Weeks', 'Month');
 		$form->add($field);
 		
@@ -284,9 +289,10 @@ class ProcessDataImport extends Process {
 		return $out;
 	}
 	
-	public function ___executeFetch() {
-		$id = (int) $this->input->get->id;
-		if (is_null($id)) $this->session->redirect("../"); // back to list
+	public function ___executeFetch($id = 0) {
+		if ($id == 0) {
+			$id = (int) $this->input->get->id;
+		}
 		$this->fuel->breadcrumbs->add(new Breadcrumb('../', 'Data imports'));
 		$this->setFuel('processHeadline', "Fetching data from source");
 		
@@ -466,6 +472,62 @@ _END;
 		$p->delete();
 		$this->db->query("DROP TABLE {$this->className}");
 		$this->db->query("DROP TABLE {$this->className}mappings");
+	}
+	
+	public function cron10Minutes(HookEvent $e) {
+		$result = $this->db->query("SELECT id FROM {$this->className} WHERE cron_interval = '10Minutes';");
+		while($row = $result->fetch_array()) {
+			$this->___executeFetch($row['id']);
+		}
+	}
+	
+	public function cron30Minutes(HookEvent $e) {
+		$result = $this->db->query("SELECT id FROM {$this->className} WHERE cron_interval = '30Minutes';");
+		while($row = $result->fetch_array()) {
+			$this->___executeFetch($row['id']);
+		}
+	}
+	
+	public function cronHour(HookEvent $e) {
+		$result = $this->db->query("SELECT id FROM {$this->className} WHERE cron_interval = 'Hour';");
+		while($row = $result->fetch_array()) {
+			$this->___executeFetch($row['id']);
+		}
+	}
+	
+	public function cron6Hours(HookEvent $e) {
+		$result = $this->db->query("SELECT id FROM {$this->className} WHERE cron_interval = '6Hours';");
+		while($row = $result->fetch_array()) {
+			$this->___executeFetch($row['id']);
+		}
+	}
+	
+	public function cron12Hours(HookEvent $e) {
+		$result = $this->db->query("SELECT id FROM {$this->className} WHERE cron_interval = '12Hours';");
+		while($row = $result->fetch_array()) {
+			$this->___executeFetch($row['id']);
+		}
+	}
+	
+	public function cronDay(HookEvent $e) {
+		$result = $this->db->query("SELECT id FROM {$this->className} WHERE cron_interval = 'Day';");
+		while($row = $result->fetch_array()) {
+			$this->___executeFetch($row['id']);
+		}
+	}
+	
+	public function cronWeek(HookEvent $e) {
+		$result = $this->db->query("SELECT id FROM {$this->className} WHERE cron_interval = 'Week';");
+		while($row = $result->fetch_array()) {
+			$this->___executeFetch($row['id']);
+		}
+	}
+	
+	public function cron4Weeks(HookEvent $e) {
+		$result = $this->db->query("SELECT id FROM {$this->className} WHERE cron_interval = '4Weeks';");
+		while($row = $result->fetch_array()) {
+			$this->___executeFetch($row['id']);
+		}
 	}
 }
 
