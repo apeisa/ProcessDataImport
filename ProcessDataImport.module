@@ -290,6 +290,8 @@ class ProcessDataImport extends Process {
 	}
 	
 	public function ___executeFetch($id = 0) {
+		$newPages = 0;
+		
 		if ($id == 0) {
 			$id = (int) $this->input->get->id;
 		}
@@ -335,10 +337,6 @@ class ProcessDataImport extends Process {
 			
 			$data_root = array_reverse($data_root);
 			
-			echo "<pre>";
-			print_r($data_root);
-			echo "</pre>";
-			
 			if ($data_format == 'xml') {
 				$loopdata = map_array($data, $data_root);
 			} elseif ($data_format == 'json') {
@@ -375,25 +373,34 @@ class ProcessDataImport extends Process {
 			}
 		}
 		
+		$curPages = $this->pages->get($parent_id)->children();
+		$template = $this->templates->get($template_id);
+		
 		// Here we create the pages
 		foreach($values as $item) {
-			$p = new Page();
-			$p->template = $this->templates->get($template_id); 
-			$p->parent = $this->pages->get($parent_id);
+			$pageName = $this->sanitizer->pageName($item[1], true); // 1 is ID for title field
+			$p = $curPages->get("template=$template, name=$pageName");
+			if (isset($p->id)) {
+				
+				// We already have the page, just update the values
+			} else {
+				$p = new Page();
+				$p->template = $template; 
+				$p->parent = $this->pages->get($parent_id);
+				$newPages++;
+			}
+			
 			foreach($item as $key => $value) {
 				$field = $this->fields->get($key);
 				$fName = $field->name;
 				$p->$fName = $value;
 			}
-			$p->name = $p->title; // TODO: If there is already page with that name, either skip, update or duplicate (should be feed setting)
+			
+			$p->name = $pageName;
 			$p->save();
 		}
 		
-		echo "<pre>";
-		print_r($values);
-		echo "</pre>";
-		
-		
+		$out = "$newPages new pages added.";
 		
 		return $out;
 		
